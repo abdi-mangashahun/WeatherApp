@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkyCast - Weather Forecast</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .weather-card {
+      backdrop-filter: blur(10px);
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    .temp-display {
+      font-size: 5rem;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    @media (max-width: 640px) {
+      .temp-display {
+        font-size: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const WeatherApp = () => {
+      const [city, setCity] = useState('');
+      const [weather, setWeather] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const [unit, setUnit] = useState('metric');
+      const [forecast, setForecast] = useState([]);
+      const [geolocationEnabled, setGeolocationEnabled] = useState(false);
+      const [background, setBackground] = useState('gradient-bg');
+
+      useEffect(() => {
+        if (navigator.geolocation) {
+          setGeolocationEnabled(true);
+        }
+      }, []);
+
+      const getWeatherData = async (lat, lon) => {
+        setLoading(true);
+        setError('');
+        try {
+          // Current weather
+          const weatherResponse = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=${unit}&appid=30b67db9f97613638351cf0b0b1037ab`
+          );
+          
+          if (!weatherResponse.ok) throw new Error('Weather data not found');
+          
+          const weatherData = await weatherResponse.json();
+          setWeather(weatherData);
+          
+          // Forecast
+          const forecastResponse = await fetch(
+            `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=${unit}&appid=30b67db9f97613638351cf0b0b1037ab`
+          );
+          
+          if (!forecastResponse.ok) throw new Error('Forecast data not found');
+          
+          const forecastData = await forecastResponse.json();
+          processForecastData(forecastData.list);
+          
+          updateBackground(weatherData.weather[0].main);
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const searchByCity = async () => {
+        if (!city.trim()) {
+          setError('Please enter a city name');
+          return;
+        }
+        
+        setLoading(true);
+        setError('');
+        try {
+          const geoResponse = await fetch(
+            `https://api.openweathermap.org/geo/1.0/direct?q=${city.trim()}&limit=1&appid=30b67db9f97613638351cf0b0b1037ab`
+          );
+          
+          if (!geoResponse.ok) throw new Error('Network response was not ok');
+          
+          const geoData = await geoResponse.json();
+          if (!geoData || geoData.length === 0 || !geoData[0]) {
+            throw new Error('City not found. Please check spelling and try again.');
+          }
+          
+          if (!geoData[0].lat || !geoData[0].lon) {
+            throw new Error('Invalid location data received');
+          }
+          
+          await getWeatherData(geoData[0].lat, geoData[0].lon);
+        } catch (err) {
+          setError(err.message);
+          setLoading(false);
+        }
+      };
+
+      const getLocation = () => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              getWeatherData(position.coords.latitude, position.coords.longitude);
+            },
+            (err) => {
+              setError('Geolocation access was denied. Please enter a city name.');
+              setGeolocationEnabled(false);
+            }
+          );
+        } else {
+          setGeolocationEnabled(false);
+        }
+      };
+
+      const processForecastData = (forecastList) => {
+        const forecastMap = new Map();
+        
+        forecastList.forEach(item => {
+          const date = new Date(item.dt * 1000);
+          const dateStr = date.toDateString();
+          
+          if (!forecastMap.has(dateStr) && date.getHours() === 12) {
+            forecastMap.set(dateStr, {
+              date: dateStr,
+              temp: item.main.temp,
+              icon: item.weather[0].icon,
+              description: item.weather[0].main,
+              wind: item.wind.speed,
+              humidity: item.main.humidity
+            });
+          }
+        });
+        
+        // Convert Map to array and limit to 5 days
+        setForecast(Array.from(forecastMap.values()).slice(0, 5));
+      };
+
+      const updateBackground = (weatherCondition) => {
+        switch (weatherCondition.toLowerCase()) {
+          case 'clear':
+            setBackground('bg-gradient-to-br from-blue-400 to-cyan-400');
+            break;
+          case 'clouds':
+            setBackground('bg-gradient-to-br from-gray-400 to-blue-300');
+            break;
+          case 'rain':
+          case 'drizzle':
+            setBackground('bg-gradient-to-br from-blue-600 to-gray-400');
+            break;
+          case 'thunderstorm':
+            setBackground('bg-gradient-to-br from-purple-800 to-gray-600');
+            break;
+          case 'snow':
+            setBackground('bg-gradient-to-br from-blue-100 to-gray-200');
+            break;
+          case 'mist':
+          case 'fog':
+          case 'haze':
+            setBackground('bg-gradient-to-br from-gray-300 to-gray-500');
+            break;
+          default:
+            setBackground('gradient-bg');
+        }
+      };
+
+      const getWeatherIcon = (iconCode) => {
+        const iconMap = {
+          '01d': 'fa-sun',
+          '01n': 'fa-moon',
+          '02d': 'fa-cloud-sun',
+          '02n': 'fa-cloud-moon',
+          '03d': 'fa-cloud',
+          '03n': 'fa-cloud',
+          '04d': 'fa-cloud-meatball',
+          '04n': 'fa-cloud-meatball',
+          '09d': 'fa-cloud-rain',
+          '09n': 'fa-cloud-rain',
+          '10d': 'fa-cloud-showers-heavy',
+          '10n': 'fa-cloud-showers-heavy',
+          '11d': 'fa-bolt',
+          '11n': 'fa-bolt',
+          '13d': 'fa-snowflake',
+          '13n': 'fa-snowflake',
+          '50d': 'fa-smog',
+          '50n': 'fa-smog'
+        };
+        
+        return iconMap[iconCode] || 'fa-cloud';
+      };
+
+      const toggleUnit = () => {
+        setUnit(unit === 'metric' ? 'imperial' : 'metric');
+        if (weather) {
+          getWeatherData(weather.coord.lat, weather.coord.lon);
+        }
+      };
+
+      const formatDate = (timestamp) => {
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric'
+        });
+      };
+
+      const getTime = (timestamp) => {
+        const date = new Date(timestamp * 1000);
+        return date.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit'
+        });
+      };
+
+      return (
+        <div className={`min-h-screen py-8 px-4 transition-all duration-500 ${background}`}>
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-bold text-white mb-2">SkyCast</h1>
+              <p className="text-white/90">Your real-time weather companion</p>
+            </div>
+            
+            <div className="weather-card p-6 mb-8">
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="Enter city name"
+                  className="flex-grow px-4 py-3 rounded-full bg-white/20 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50"
+                  onKeyDown={(e) => e.key === 'Enter' && searchByCity()}
+                />
+                <button
+                  onClick={searchByCity}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full transition-all flex items-center justify-center gap-2"
+                >
+                  <i className="fas fa-search"></i> Search
+                </button>
+                {geolocationEnabled && (
+                  <button
+                    onClick={getLocation}
+                    className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full transition-all flex items-center justify-center gap-2"
+                    title="Use my current location"
+                  >
+                    <i className="fas fa-location-arrow"></i>
+                    <span className="hidden md:inline">Location</span>
+                  </button>
+                )}
+                <button
+                  onClick={toggleUnit}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white font-medium rounded-full transition-all flex items-center justify-center gap-2"
+                >
+                  {unit === 'metric' ? (
+                    <>
+                      <span className="hidden md:inline">°C to °F</span>
+                      <span className="md:hidden">°C ↔ °F</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="hidden md:inline">°F to °C</span>
+                      <span className="md:hidden">°F ↔ °C</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {loading && (
+                <div className="text-center py-12">
+                  <i className="fas fa-circle-notch fa-spin text-white text-4xl"></i>
+                  <p className="mt-4 text-white">Loading weather data...</p>
+                </div>
+              )}
+              
+              {error && (
+                <div className="bg-red-500/20 border-l-4 border-red-500 text-red-100 p-4 rounded backdrop-blur-sm mb-6 animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-exclamation-circle"></i>
+                    <p className="font-medium">{error}</p>
+                  </div>
+                </div>
+              )}
+              
+              {weather && !loading && (
+                <div className="text-white">
+                  <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-2xl font-semibold">{weather.name}, {weather.sys.country}</h2>
+                      <p className="text-white/80">{formatDate(weather.dt)} • {getTime(weather.dt)}</p>
+                    </div>
+                    <div className="text-right mt-4 md:mt-0">
+                      <p className="text-xl capitalize">{weather.weather[0].description}</p>
+                      <p className="text-sm">Humidity: {weather.main.humidity}% • Wind: {weather.wind.speed} {unit === 'metric' ? 'm/s' : 'mph'}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col md:flex-row items-center justify-between">
+                    <div className="flex items-center">
+                      <i className={`fas ${getWeatherIcon(weather.weather[0].icon)} text-6xl md:text-8xl mr-4`}></i>
+                      <div className="temp-display font-bold">
+                        {Math.round(weather.main.temp)}°
+                        <span className="text-xl">{unit === 'metric' ? 'C' : 'F'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 md:mt-0">
+                      <div className="bg-white/10 p-3 rounded-lg text-center">
+                        <p className="text-sm text-white/70">Feels Like</p>
+                        <p className="font-medium">{Math.round(weather.main.feels_like)}°</p>
+                      </div>
+                      <div className="bg-white/10 p-3 rounded-lg text-center">
+                        <p className="text-sm text-white/70">Min</p>
+                        <p className="font-medium">{Math.round(weather.main.temp_min)}°</p>
+                      </div>
+                      <div className="bg-white/10 p-3 rounded-lg text-center">
+                        <p className="text-sm text-white/70">Max</p>
+                        <p className="font-medium">{Math.round(weather.main.temp_max)}°</p>
+                      </div>
+                      <div className="bg-white/10 p-3 rounded-lg text-center">
+                        <p className="text-sm text-white/70">Pressure</p>
+                        <p className="font-medium">{weather.main.pressure} hPa</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {forecast.length > 0 && (
+              <div className="weather-card p-6">
+                <h3 className="text-xl font-semibold text-white mb-4">5-Day Forecast</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {forecast.map((item, index) => (
+                    <div key={index} className="bg-white/10 p-4 rounded-lg text-center text-white">
+                      <p className="font-medium">{new Date(item.date).toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                      <p className="text-sm text-white/70 mb-2">{new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                      <i className={`fas ${getWeatherIcon(item.icon)} text-3xl mb-2`}></i>
+                      <p className="font-bold">{Math.round(item.temp)}°</p>
+                      <p className="text-sm capitalize">{item.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="text-center mt-8 text-white/70 text-sm">
+              <p>Weather data provided by OpenWeatherMap</p>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<WeatherApp />);
+  </script>
+</body>
+</html>
