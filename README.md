@@ -1,7 +1,8 @@
 SkyCast - Weather Forecast
 
-Live Demo
-Overview
+
+
+
 
 SkyCast is a responsive and interactive weather forecast web application built with React and Tailwind CSS. It provides real-time weather information and a 5-day forecast based on user input or geolocation.
 Features
